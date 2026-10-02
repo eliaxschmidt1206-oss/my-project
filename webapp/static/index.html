@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ClipForge - Turn long videos into shorts</title>
+<style>
+:root{--bg:#0b0b12;--card:#161622;--line:#2a2a3d;--fg:#f2f2f7;--mut:#9a9ab0;--acc:#7c5cff;--acc2:#ff4d8d}
+@media(prefers-color-scheme:light){:root{--bg:#f6f6fb;--card:#fff;--line:#dcdcea;--fg:#14141f;--mut:#63637a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
+main{max-width:960px;margin:0 auto;padding:40px 16px}
+h1{font-size:clamp(28px,5vw,44px);margin:0 0 8px;line-height:1.1}
+h1 span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;color:transparent}
+p.sub{color:var(--mut);margin:0 0 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+input[type=url],input[type=file],select,input[type=number]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:14px}
+label{font-size:13px;color:var(--mut);display:block;margin-bottom:4px}
+.or{text-align:center;color:var(--mut);margin:10px 0}
+button{width:100%;margin-top:18px;padding:14px;border:0;border-radius:12px;font:600 16px inherit;color:#fff;background:linear-gradient(90deg,var(--acc),var(--acc2));cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+#status{margin-top:24px;display:none}
+.bar{height:10px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .4s}
+#err{color:#ff6b6b;margin-top:12px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;margin-top:24px}
+.clip{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.clip video{width:100%;aspect-ratio:9/16;background:#000;display:block}
+.clip div{padding:10px 12px;font-size:13px;color:var(--mut)}
+.score{display:inline-block;background:var(--acc);color:#fff;border-radius:99px;padding:1px 10px;font-weight:600;margin-right:6px}
+.clip a{color:var(--acc);font-weight:600;text-decoration:none}
+small.legal{display:block;color:var(--mut);margin-top:24px;font-size:12px}
+</style></head><body><main>
+<h1>Turn long videos into <span>viral shorts</span></h1>
+<p class="sub">Paste a YouTube link or upload a video. We find the best moments and cut them into vertical clips with captions.</p>
+<form id="f" class="card">
+  <label>YouTube link</label><input type="url" name="url" placeholder="https://www.youtube.com/watch?v=...">
+  <div class="or">or</div>
+  <label>Upload a video</label><input type="file" name="file" accept="video/*">
+  <div class="row">
+    <div><label>Number of clips</label><input type="number" name="count" value="5" min="1" max="10"></div>
+    <div><label>Min length (s)</label><input type="number" name="min_s" value="20" min="10"></div>
+    <div><label>Max length (s)</label><input type="number" name="max_s" value="60" max="120"></div>
+    <div><label>Framing</label><select name="reframe"><option value="blur">Full frame + blur</option><option value="center">Crop to fill</option></select></div>
+    <div><label>Captions</label><select name="captions"><option value="true">On</option><option value="false">Off</option></select></div>
+  </div>
+  <button id="go">Generate shorts</button>
+</form>
+<div id="status" class="card"><b id="stxt">Starting…</b><div class="bar"><i id="bar"></i></div><div id="err"></div></div>
+<div id="grid"></div>
+<small class="legal">Only use videos you own or have permission to repurpose. Downloading from YouTube may be restricted by its Terms of Service.</small>
+</main>
+<script>
+const $=id=>document.getElementById(id),L={queued:"Waiting in queue…",downloading:"Downloading video…",analyzing:"Finding the best moments…",rendering:"Rendering your shorts…",done:"Done!"};
+let shown=0;
+$("f").onsubmit=async e=>{
+  e.preventDefault();$("go").disabled=true;$("err").textContent="";$("grid").innerHTML="";shown=0;
+  $("status").style.display="block";$("stxt").textContent="Uploading…";$("bar").style.width="0";
+  const r=await fetch("/api/jobs",{method:"POST",body:new FormData($("f"))});
+  if(!r.ok){$("err").textContent=(await r.json()).detail||"Something went wrong";$("go").disabled=false;return}
+  poll((await r.json()).id);
+};
+async function poll(id){
+  const r=await fetch("/api/jobs/"+id);
+  if(!r.ok){$("err").textContent="Job expired.";$("go").disabled=false;return}
+  const j=await r.json();
+  $("stxt").textContent=(L[j.status]||j.status)+(j.title?" - "+j.title:"");$("bar").style.width=j.progress+"%";
+  for(;shown<j.clips.length;shown++){const c=j.clips[shown],d=document.createElement("div");d.className="clip";
+    d.innerHTML=`<video controls preload="metadata" src="${c.file}"></video><div><span class="score">${c.virality}</span>${Math.round(c.duration)}s · <a href="${c.file}?download=true">Download</a><br>${(c.preview||"").replace(/</g,"&lt;")}</div>`;$("grid").append(d)}
+  if(j.status==="error"){$("err").textContent=j.error;$("go").disabled=false;return}
+  if(j.status==="done"){$("go").disabled=false;return}
+  setTimeout(()=>poll(id),1500);
+}
+</script></body></html>
