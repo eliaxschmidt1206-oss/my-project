@@ -19,9 +19,18 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+    mcp = FastMCP("shorts-maker")
+except ImportError:  # the web app reuses this module and doesn't need MCP
+    class _NoMCP:
+        def tool(self):
+            return lambda f: f
 
-mcp = FastMCP("shorts-maker")
+        def run(self):
+            raise SystemExit("Install the MCP SDK to run as a Claude tool: pip install 'mcp<2'")
+
+    mcp = _NoMCP()
 
 OUT_DIR = Path.home() / "shorts_output"
 HOOK_WORDS = {
